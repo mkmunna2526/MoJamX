@@ -24,7 +24,7 @@
         body {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             min-height: 100vh;
-            padding-bottom: 15%;
+            padding-bottom: 12%;
             max-width: 480px;
             margin: 0 auto;
             box-shadow: 0 0 5% rgba(0,0,0,0.8);
@@ -586,8 +586,14 @@
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
     <script src="https://telegram.org/js/telegram-web-app.js?56"></script>
+    
+    <!-- Monetag Ad -->
     <script src='//libtl.com/sdk.js' data-zone='10144322' data-sdk='show_10144322'></script>
+    
+    <!-- Adexium Ad -->
     <script src="https://cdn.tgads.space/assets/js/adexium-widget.min.js"></script>
+    
+    <!-- Adsgram Ad -->
     <script src="https://sad.adsgram.ai/js/sad.min.js"></script>
 
     <script>
@@ -619,23 +625,50 @@
             // Initialize Ad Networks
             let adexiumWidget = null;
             let adsgramController = null;
+            let adsgramReady = false;
             
+            // Monetag - Already initialized via script tag
+            console.log('Monetag SDK loaded:', typeof show_10144322 !== 'undefined');
+            
+            // Initialize Adexium
             try {
                 if (typeof AdexiumWidget !== 'undefined') {
                     adexiumWidget = new AdexiumWidget({
                         wid: 'c4540e3b-2bd7-467e-b818-4998a8cf339d',
                         adFormat: 'interstitial'
                     });
-                    console.log('✅ Adexium initialized');
+                    console.log('✅ Adexium initialized successfully');
+                } else {
+                    console.log('⚠️ Adexium SDK not loaded');
                 }
-            } catch(e) { console.log('Adexium not loaded'); }
+            } catch(e) { 
+                console.log('❌ Adexium init error:', e); 
+            }
 
+            // Initialize Adsgram with proper error handling
             try {
                 if (window.Adsgram) {
-                    adsgramController = window.Adsgram.init({ blockId: "int-16935" });
-                    console.log('✅ Adsgram initialized');
+                    // Changed block ID to "17028" as per your documentation
+                    adsgramController = window.Adsgram.init({ 
+                        blockId: "17028"  // Using the working block ID from your docs
+                    });
+                    
+                    // Preload the ad
+                    adsgramController.load()
+                        .then(() => {
+                            adsgramReady = true;
+                            console.log('✅ Adsgram initialized and preloaded');
+                        })
+                        .catch((err) => {
+                            console.log('⚠️ Adsgram preload failed:', err);
+                            adsgramReady = false;
+                        });
+                } else {
+                    console.log('⚠️ Adsgram SDK not loaded');
                 }
-            } catch(e) { console.log('Adsgram not loaded'); }
+            } catch(e) { 
+                console.log('❌ Adsgram init error:', e); 
+            }
 
             // ⭐⭐⭐ এখানে তোমার TASKS লিখবে ⭐⭐⭐
             const defaultTasks = [
@@ -814,25 +847,59 @@
 
             function showAd() {
                 const network = adNetworks[gameState.currentAdNetwork];
-                console.log('🎬 Showing ad from:', network);
+                console.log('🎬 Attempting to show ad from:', network);
 
                 try {
-                    if (network === 'monetag' && typeof show_10144322 === 'function') {
-                        show_10144322().then(() => {
-                            console.log('✅ Monetag ad shown');
-                        }).catch(e => console.log('Monetag error:', e));
-                    } else if (network === 'adexium' && adexiumWidget) {
-                        adexiumWidget.show();
-                        console.log('✅ Adexium ad shown');
-                    } else if (network === 'adsgram' && adsgramController) {
-                        adsgramController.show().then(() => {
-                            console.log('✅ Adsgram ad shown');
-                        }).catch(e => console.log('Adsgram error:', e));
+                    if (network === 'monetag') {
+                        if (typeof show_10144322 === 'function') {
+                            show_10144322().then(() => {
+                                console.log('✅ Monetag ad completed');
+                            }).catch(e => {
+                                console.log('⚠️ Monetag ad error:', e);
+                            });
+                        } else {
+                            console.log('❌ Monetag function not available');
+                        }
+                    } 
+                    else if (network === 'adexium') {
+                        if (adexiumWidget) {
+                            try {
+                                adexiumWidget.show();
+                                console.log('✅ Adexium ad shown');
+                            } catch (e) {
+                                console.log('⚠️ Adexium show error:', e);
+                            }
+                        } else {
+                            console.log('❌ Adexium widget not initialized');
+                        }
+                    } 
+                    else if (network === 'adsgram') {
+                        if (adsgramController && adsgramReady) {
+                            adsgramController.show().then((result) => {
+                                console.log('✅ Adsgram ad completed:', result);
+                                // Preload next ad
+                                adsgramController.load().then(() => {
+                                    adsgramReady = true;
+                                    console.log('🔄 Adsgram next ad preloaded');
+                                });
+                            }).catch(e => {
+                                console.log('⚠️ Adsgram show error:', e);
+                                // Try to reload
+                                adsgramController.load().then(() => {
+                                    adsgramReady = true;
+                                }).catch(() => {
+                                    adsgramReady = false;
+                                });
+                            });
+                        } else {
+                            console.log('❌ Adsgram not ready. Ready status:', adsgramReady);
+                        }
                     }
                 } catch (e) {
-                    console.log('Ad error:', e);
+                    console.log('❌ Ad show error for', network, ':', e);
                 }
 
+                // Move to next ad network
                 gameState.currentAdNetwork = (gameState.currentAdNetwork + 1) % adNetworks.length;
             }
 
@@ -871,47 +938,80 @@
             }
 
             function showAllAds() {
+                console.log('🎯 Starting to show all 3 ads for diamond claim...');
                 let adCount = 0;
                 
+                // Ad 1: Monetag (after 0.5 seconds)
                 setTimeout(() => {
                     if (typeof show_10144322 === 'function') {
+                        console.log('📢 Showing Monetag ad 1/3...');
                         show_10144322().then(() => {
-                            console.log('✅ Monetag ad 1 shown');
+                            console.log('✅ Monetag ad 1/3 completed');
                             adCount++;
                         }).catch(e => {
-                            console.log('Monetag error:', e);
+                            console.log('⚠️ Monetag ad error:', e);
                             adCount++;
-                        });
-                    } else adCount++;
-                }, 500);
-
-                setTimeout(() => {
-                    if (adexiumWidget) {
-                        adexiumWidget.show();
-                        console.log('✅ Adexium ad 2 shown');
-                    }
-                    adCount++;
-                }, 3000);
-
-                setTimeout(() => {
-                    if (adsgramController) {
-                        adsgramController.show().then(() => {
-                            console.log('✅ Adsgram ad 3 shown');
-                            gameState.diamonds++;
-                            updateDisplay();
-                            saveUserData();
-                        }).catch(e => {
-                            console.log('Adsgram error:', e);
-                            gameState.diamonds++;
-                            updateDisplay();
-                            saveUserData();
                         });
                     } else {
+                        console.log('❌ Monetag not available, skipping...');
+                        adCount++;
+                    }
+                }, 500);
+
+                // Ad 2: Adexium (after 3 seconds)
+                setTimeout(() => {
+                    if (adexiumWidget) {
+                        console.log('📢 Showing Adexium ad 2/3...');
+                        try {
+                            adexiumWidget.show();
+                            console.log('✅ Adexium ad 2/3 shown');
+                        } catch(e) {
+                            console.log('⚠️ Adexium error:', e);
+                        }
+                        adCount++;
+                    } else {
+                        console.log('❌ Adexium not available, skipping...');
+                        adCount++;
+                    }
+                }, 3000);
+
+                // Ad 3: Adsgram (after 6 seconds) + Give reward
+                setTimeout(() => {
+                    if (adsgramController && adsgramReady) {
+                        console.log('📢 Showing Adsgram ad 3/3...');
+                        adsgramController.show().then((result) => {
+                            console.log('✅ Adsgram ad 3/3 completed:', result);
+                            gameState.diamonds++;
+                            updateDisplay();
+                            saveUserData();
+                            console.log('💎 Diamond awarded! Total:', gameState.diamonds);
+                            
+                            // Preload next ad
+                            adsgramController.load().then(() => {
+                                adsgramReady = true;
+                                console.log('🔄 Next Adsgram ad preloaded');
+                            });
+                        }).catch(e => {
+                            console.log('⚠️ Adsgram error:', e);
+                            // Give diamond anyway
+                            gameState.diamonds++;
+                            updateDisplay();
+                            saveUserData();
+                            
+                            // Try to reload
+                            adsgramController.load().catch(() => {
+                                adsgramReady = false;
+                            });
+                        });
+                    } else {
+                        console.log('❌ Adsgram not ready, giving diamond anyway...');
                         gameState.diamonds++;
                         updateDisplay();
                         saveUserData();
                     }
                 }, 6000);
+
+                console.log('✨ All ads scheduled. Waiting for completion...');
             }
 
             window.switchPage = function(pageId, element) {
